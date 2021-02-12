@@ -30,10 +30,9 @@ Options:
   --greedy                        Whether to gulp the model tree recursively,
                                   meaning models will be gathered from the
                                   field specification in other models. This
-                                  option does nothing if no model is specified
-                                  (since the whole graph will be included).
-                                  That is, not specifying any models is the
-                                  greediest operation.  [default: False]
+                                  option does nothing if the 'all' wildcard is
+                                  used (since the whole graph will be
+                                  included).  [default: False]
 
   --install-completion [bash|zsh|fish|powershell|pwsh]
                                   Install completion for the specified shell.
@@ -42,7 +41,6 @@ Options:
                                   copy it or customize the installation.
 
   --help                          Show this message and exit.
-
 ```
 
 ### How to use the generated code

@@ -317,9 +317,8 @@ def main(
         "--greedy",
         help="Whether to gulp the model tree recursively, meaning models "
         "will be gathered from the field specification in other models. "
-        "This option does nothing if no model is specified (since the whole "
-        "graph will be included). That is, not specifying any models is the "
-        "greediest operation.",
+        "This option does nothing if the 'all' wildcard is used (since the whole "
+        "graph will be included).",
     ),
 ):
     """Generates a single python source file with pydantic models

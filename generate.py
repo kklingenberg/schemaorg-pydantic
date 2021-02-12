@@ -32,17 +32,15 @@ class Field:
 
         """
         return "\n        ".join(
-            map(
-                repr,
-                jinja_environment.filters["wordwrap"](
-                    jinja_environment,
-                    self.description,
-                    width=67,
-                    break_long_words=False,
-                    break_on_hyphens=False,
-                    wrapstring="\n",
-                ).splitlines(),
-            )
+            repr(f"{line} ")
+            for line in jinja_environment.filters["wordwrap"](
+                jinja_environment,
+                self.description,
+                width=66,
+                break_long_words=False,
+                break_on_hyphens=False,
+                wrapstring="\n",
+            ).splitlines()
         )
 
 
@@ -76,9 +74,28 @@ class Model:
 
 
 class Enum:
-    def __init__(self, name: str, members: list[str]):
+    def __init__(self, name: str, description: Union[str, dict], members: list[str]):
         self.name = name
+        self.description = (
+            description if isinstance(description, str) else description["@value"]
+        )
         self.members = members
+
+    @property
+    def formatted_description(self):
+        """An ad-hoc formatted python string, split over many lines. This is
+        useful to cope with black's lack of string formatting
+        capabilities.
+
+        """
+        return jinja_environment.filters["wordwrap"](
+            jinja_environment,
+            self.description,
+            width=79,
+            break_long_words=False,
+            break_on_hyphens=False,
+            wrapstring="\n    ",
+        )
 
 
 # A mapping of schema.org DataType(s) to pydantic types
@@ -285,7 +302,9 @@ class Registry:
             for key, type_ in self._vocabulary.items()
             if f"schema:{name}" in _setify(type_.get("@type"), prop=None)
         ):
-            self._enums[name] = self._enums.get(name, Enum(name, []))
+            self._enums[name] = self._enums.get(
+                name, Enum(name, node.get("rdfs:comment", ""), [])
+            )
             self._enums[name].members.append(member)
             self.load_type(member)
 
@@ -296,6 +315,7 @@ class Registry:
                 type_
                 for name, type_ in self._type_cache.items()
                 if isinstance(type_, Model)
+                if name not in self._enums
                 if not any(name in enum.members for enum in self._enums.values())
             ],
             key=lambda type_: type_.name,

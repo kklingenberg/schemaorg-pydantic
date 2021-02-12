@@ -16,6 +16,7 @@ black version: {{ black_version }}
 """
 from datetime import date, datetime, time
 from decimal import Decimal
+from enum import Enum
 from typing import Any, List, Literal, Optional, Union
 
 from pydantic import AnyUrl, BaseModel, Field, StrictBool
@@ -34,11 +35,26 @@ class SchemaOrgBase(BaseModel):
         allow_population_by_field_name = True
 
 
+{% for enum in enums %}
+class {{ enum.name }}(str, Enum):
+    """{{ enum.formatted_description }}
+
+    See https://schema.org/{{ enum.name }}.
+
+    """
+
+    {%- for member in enum.members %}
+    {{ member }} = "https://schema.org/{{ member }}"
+    {%- endfor %}
+
+{% endfor %}
+
+
 {% for model in models %}
 class {{ model.name }}(SchemaOrgBase):
     """{{ model.formatted_description }}
 
-    See https://schema.org/{{ model.name }}.
+    See https://schema.org/{{ model.type_marker }}.
 
     """
 
@@ -57,23 +73,3 @@ class {{ model.name }}(SchemaOrgBase):
 {%- for model in models %}
 {{ model.name }}.update_forward_refs()
 {%- endfor %}
-
-
-class enum:
-    "Inner namespace for schema.org enumerations."
-    {% for enum in enums %}
-    class {{ enum.name }}:
-
-        {%- for member in enum.members %}
-        {{ member }} = {{ enum.name }}(
-            identifier="https://schema.org/{{ member }}",
-            name="{{ member }}",
-        )
-        {%- else %}
-        pass
-        {%- endfor %}
-
-
-    {% else %}
-    pass
-    {% endfor %}

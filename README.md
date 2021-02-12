@@ -1,7 +1,8 @@
 # schemaorg-pydantic
 
 This is a docker image which generates a python source file with
-[pydantic](https://pydantic-docs.helpmanual.io/) models.
+[pydantic](https://pydantic-docs.helpmanual.io/) models which follow
+[schema.org](https://schema.org) types.
 
 ## How to use
 

@@ -348,7 +348,7 @@ def main(
     """
     all_models = "all" in models
     registry = Registry(
-        "./schemaorg-current-http.jsonld",
+        Path(__file__).parent / "schemaorg-current-http.jsonld",
         data_type_map,
         data_type_specificity,
         prune_to=None if greedy or all_models else models,

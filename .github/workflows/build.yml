@@ -1,0 +1,31 @@
+name: Build docker images and push them to the registry
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Login
+        env:
+          DOCKER_HUB_PASSWORD: ${{ secrets.DOCKER_HUB_PASSWORD }}
+        run: echo "$DOCKER_HUB_PASSWORD" | docker login -u plotter --password-stdin
+      - name: Build image
+        run: docker build -t plotter/schemaorg-pydantic:latest
+                          -t plotter/schemaorg-pydantic:${GITHUB_SHA}
+                          --build-arg COMMIT=${GITHUB_SHA}
+                          .
+      - name: Test the image
+        run: docker run --rm
+                        -v $(pwd)/test.sh:/app/test.sh
+                        --entrypoint ""
+                        plotter/schemaorg-pydantic:${GITHUB_SHA}
+                        /app/test.sh
+      - name: Push latest tag
+        run: docker push plotter/schemaorg-pydantic:latest
+      - name: Push unique tag
+        run: docker push plotter/schemaorg-pydantic:${GITHUB_SHA}

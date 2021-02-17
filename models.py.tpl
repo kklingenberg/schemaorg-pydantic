@@ -73,3 +73,23 @@ class {{ model.name }}(SchemaOrgBase):
 {%- for model in models %}
 {{ model.name }}.update_forward_refs()
 {%- endfor %}
+
+if __name__ == "__main__":
+    {# Idempotency #}
+    {%- for model in models %}
+    obj = {{ model.name }}.construct(name="foo", description=["bar", "baz"])
+    assert obj.dict() == {{ model.name }}.parse_obj(obj.dict()).dict()
+    {# Check dict lists are parsed as dicts, and not as as lists of dict keys #}
+    {%- if model.name == "Product" %}
+    product = Product(name="foo", isConsumableFor=Product(name="bar"))
+    assert product.dict() == Product.parse_obj(product.dict()).dict()
+    product_list = Product(name="foo", isConsumableFor=[Product(name="bar")])
+    assert product_list.dict() == Product.parse_obj(product_list.dict()).dict()
+    {%- endif %}
+    {# Check string of numbers are parsed as numbers and not as lists #}
+    {% if model.name == "QuantitativeValue" %}
+    quantitative_value = {"name": "foo", "maxValue": "123", "@type": "QuantitativeValue"}
+    assert QuantitativeValue.parse_obj(quantitative_value).dict()["maxValue"] == 123
+    {%- endif %}
+
+    {%- endfor %}

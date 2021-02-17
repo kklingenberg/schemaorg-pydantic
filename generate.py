@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+from pathlib import Path
 from typing import List, Optional, Union
 
 import black
@@ -256,7 +257,7 @@ class Registry:
             # If there's more than one type there, then build a Union
             elif len(pydantic_type) > 1:
                 optional = pydantic_type[-1] != "Any"
-                pydantic_type = f"Union[Union[{type_tuple}], List[Union[{type_tuple}]]]"
+                pydantic_type = f"Union[List[Union[{type_tuple}]], Union[{type_tuple}]]"
                 if optional:
                     pydantic_type = f"Optional[{pydantic_type}]"
             # If there's only one, then don't build a Union
@@ -264,7 +265,7 @@ class Registry:
                 pydantic_type = (
                     type_tuple
                     if type_tuple == "Any"
-                    else f"Optional[Union[{type_tuple}, List[{type_tuple}]]]"
+                    else f"Optional[Union[List[{type_tuple}], {type_tuple}]]"
                 )
             # Register the field
             fields[key] = Field(
@@ -347,7 +348,7 @@ def main(
     """
     all_models = "all" in models
     registry = Registry(
-        "./schemaorg-current-http.jsonld",
+        Path(__file__).parent / "schemaorg-current-http.jsonld",
         data_type_map,
         data_type_specificity,
         prune_to=None if greedy or all_models else models,
@@ -355,7 +356,7 @@ def main(
     models = models if not all_models else registry.all_types()
     for type_ in models:
         registry.load_type(type_)
-    with open("./models.py.tpl") as template_file:
+    with open(Path(__file__).parent / "models.py.tpl") as template_file:
         template = jinja_environment.from_string(template_file.read())
     print(
         black.format_str(

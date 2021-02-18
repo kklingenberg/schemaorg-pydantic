@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+import sys
 from pathlib import Path
 from typing import List, Optional, Union
 
@@ -8,95 +9,95 @@ import black
 import jinja2
 import typer
 
-# Define a couple of container classes for the Jinja2 template rendering
-
 jinja_environment = jinja2.Environment()
 
 # python's reserved words which cannot be variable names
 reserved_words = {"class", "def", "from", "import", "return", "yield"}
 
 
-class Field:
-    def __init__(self, name: str, type_: str, description: Union[str, dict]):
-        self.name = f"{name}_" if name in reserved_words else name
-        self.alias = name
-        self.type = type_
+def legal_variable(name: str) -> str:
+    "Turn a string into a legal python variable."
+    if name in reserved_words:
+        return f"{name}_"
+    if not name:
+        return "_"
+    if name[0].isdigit():
+        return f"_{name}"
+    return name
+
+
+def split_by_width(text: str, width: int) -> list[str]:
+    """An ad-hoc formatted python string, split over many lines. This is
+    useful to cope with black's lack of string formatting
+    capabilities.
+
+    """
+    return jinja_environment.filters["wordwrap"](
+        jinja_environment,
+        text,
+        width=width,
+        break_long_words=False,
+        break_on_hyphens=False,
+        wrapstring="\n",
+    ).splitlines()
+
+
+# Define a couple of container classes for the Jinja2 template rendering
+
+
+class Base:
+    "An identifyable thing."
+
+    def __init__(self, *, name: str, description: Union[str, dict] = ""):
+        self.name = legal_variable(name)
+        self.schema_name = name
         self.description = (
             description if isinstance(description, str) else description["@value"]
         )
 
-    @property
-    def formatted_description(self):
-        """An ad-hoc formatted python string, split over many lines. This is
-        useful to cope with black's lack of string formatting
-        capabilities.
-
-        """
-        return "\n        ".join(
-            repr(f"{line} ")
-            for line in jinja_environment.filters["wordwrap"](
-                jinja_environment,
-                self.description,
-                width=66,
-                break_long_words=False,
-                break_on_hyphens=False,
-                wrapstring="\n",
-            ).splitlines()
-        )
-
-
-class Model:
-    def __init__(self, name: str, description: Union[str, dict], fields: list[Field]):
-        self.name = f"_{name}" if name[0].isdigit() else name
-        self.type_marker = name
-        self.description = (
-            description if isinstance(description, str) else description["@value"]
-        )
-        self.fields = fields
-
-    def __str__(self):
+    def by_name(self):
         return self.name
 
-    @property
-    def formatted_description(self):
-        """An ad-hoc formatted python string, split over many lines. This is
-        useful to cope with black's lack of string formatting
-        capabilities.
-
-        """
-        return jinja_environment.filters["wordwrap"](
-            jinja_environment,
-            self.description,
-            width=79,
-            break_long_words=False,
-            break_on_hyphens=False,
-            wrapstring="\n    ",
-        )
+    def by_schema_name(self):
+        return self.schema_name
 
 
-class Enum:
-    def __init__(self, name: str, description: Union[str, dict], members: list[str]):
-        self.name = name
-        self.description = (
-            description if isinstance(description, str) else description["@value"]
-        )
-        self.members = members
+class Field(Base):
+    "A Model or Enum's field."
+
+    def __init__(self, *, type_: str = "str", **kwargs):
+        super().__init__(**kwargs)
+        self.type = type_
 
     @property
     def formatted_description(self):
-        """An ad-hoc formatted python string, split over many lines. This is
-        useful to cope with black's lack of string formatting
-        capabilities.
-
-        """
-        return jinja_environment.filters["wordwrap"](
-            jinja_environment,
-            self.description,
-            width=79,
-            break_long_words=False,
-            break_on_hyphens=False,
-            wrapstring="\n    ",
+        return "\n        ".join(
+            repr(f"{line} ") for line in split_by_width(self.description, 66)
         )
+
+
+class Model(Base):
+    "A non-enum Model, i.e. a schema.org class without members."
+
+    def __init__(self, *, fields: list[Field], **kwargs):
+        super().__init__(**kwargs)
+        self.fields = list(fields)
+
+    @property
+    def formatted_description(self):
+        return "\n    ".join(split_by_width(self.description, 79))
+
+
+class Enum(Base):
+    "A schema.org class with inhabitant members in the vocabulary."
+
+    def __init__(self, *, members: list[Field], **kwargs):
+        super().__init__(**kwargs)
+        self.members = list(members)
+
+    @property
+    def formatted_description(self):
+        return "\n    ".join(split_by_width(self.description, 79))
 
 
 # A mapping of schema.org DataType(s) to pydantic types
@@ -183,7 +184,7 @@ class Registry:
         self._field_cache = {k: {} for k in data_type_map}
         # A set of types which are internally referenced yet not
         # present in the vocabulary
-        self._missing_types = set()
+        self.missing_types = set()
 
     def _load_vocabulary(self):
         if self._vocabulary is None:
@@ -201,7 +202,7 @@ class Registry:
 
     def load_type(self, name: str):
         "Loads a type and its dependencies from the vocabulary."
-        if name in self._type_cache or name in self._missing_types:
+        if name in self._type_cache or name in self.missing_types:
             return
         self._load_vocabulary()
         try:
@@ -233,7 +234,7 @@ class Registry:
             ]
             for field_type in field_types:
                 if f"schema:{field_type}" not in self._vocabulary:
-                    self._missing_types.add(field_type)
+                    self.missing_types.add(field_type)
                 elif field_type not in self._type_cache:
                     forward_refs.add(field_type)
             pydantic_type = tuple(
@@ -245,7 +246,7 @@ class Registry:
                     key=lambda field_type: self._type_specificity.get(field_type, 0),
                     reverse=True,
                 )
-                if field_type not in self._missing_types
+                if field_type not in self.missing_types
             )
             # If any type is explicitly excluded, then add 'Any' to account for them
             if declared_field_types != field_types:
@@ -269,9 +270,9 @@ class Registry:
                 )
             # Register the field
             fields[key] = Field(
-                key,
-                pydantic_type,
-                self._vocabulary[f"schema:{key}"].get("rdfs:comment", ""),
+                name=key,
+                description=self._vocabulary[f"schema:{key}"].get("rdfs:comment", ""),
+                type_=pydantic_type,
             )
 
         # Register type-exclusive fields
@@ -285,14 +286,16 @@ class Registry:
             try:
                 self.load_type(parent_name)
             except AttributeError:
-                self._missing_types.add(parent_name)
+                self.missing_types.add(parent_name)
         # Merge in parent fields
         for parent_name in parent_names:
-            if parent_name not in self._missing_types:
+            if parent_name not in self.missing_types:
                 self._field_cache[name].update(self._field_cache[parent_name])
         # Register the requested model
         self._type_cache[name] = Model(
-            name, node.get("rdfs:comment", ""), self._field_cache[name].values()
+            name=name,
+            description=node.get("rdfs:comment", ""),
+            fields=self._field_cache[name].values(),
         )
         # Resolve the field types
         for forward_ref in forward_refs:
@@ -304,9 +307,10 @@ class Registry:
             if f"schema:{name}" in _setify(type_.get("@type"), prop=None)
         ):
             self._enums[name] = self._enums.get(
-                name, Enum(name, node.get("rdfs:comment", ""), [])
+                name,
+                Enum(name=name, description=node.get("rdfs:comment", ""), members=[]),
             )
-            self._enums[name].members.append(member)
+            self._enums[name].members.append(Field(name=member))
             self.load_type(member)
 
     def models(self):
@@ -317,14 +321,17 @@ class Registry:
                 for name, type_ in self._type_cache.items()
                 if isinstance(type_, Model)
                 if name not in self._enums
-                if not any(name in enum.members for enum in self._enums.values())
+                if not any(
+                    name in map(Base.by_schema_name, enum.members)
+                    for enum in self._enums.values()
+                )
             ],
-            key=lambda type_: type_.name,
+            key=Base.by_name,
         )
 
     def enums(self):
         "Return all currently loaded enums."
-        return sorted(self._enums.values(), key=lambda enum: enum.name)
+        return sorted(self._enums.values(), key=Base.by_name)
 
 
 def main(
@@ -341,6 +348,12 @@ def main(
         "This option does nothing if the 'all' wildcard is used (since the whole "
         "graph will be included).",
     ),
+    skip_black: bool = typer.Option(
+        False,
+        "--skip-black",
+        help="Disable formatting through black. The generated output will be "
+        "considerably uglier, but it'll be generated faster.",
+    ),
 ):
     """Generates a single python source file with pydantic models
     representing schema.org models.
@@ -356,23 +369,32 @@ def main(
     models = models if not all_models else registry.all_types()
     for type_ in models:
         registry.load_type(type_)
+    if registry.missing_types:
+        print("Types referenced but missing from the vocabulary:", file=sys.stderr)
+        print(repr(registry.missing_types), file=sys.stderr)
     with open(Path(__file__).parent / "models.py.tpl") as template_file:
         template = jinja_environment.from_string(template_file.read())
-    print(
-        black.format_str(
-            template.render(
-                schemaorg_version=os.getenv("SCHEMAORG_VERSION"),
-                commit=os.getenv("COMMIT"),
-                typer_version=typer.__version__,
-                jinja2_version=jinja2.__version__,
-                black_version=black.__version__,
-                timestamp=datetime.datetime.now(),
-                models=registry.models(),
-                enums=registry.enums(),
-            ),
-            mode=black.Mode(),
-        )
+
+    template_args = dict(
+        schemaorg_version=os.getenv("SCHEMAORG_VERSION"),
+        commit=os.getenv("COMMIT"),
+        typer_version=typer.__version__,
+        jinja2_version=jinja2.__version__,
+        black_version=black.__version__,
+        skip_black=skip_black,
+        timestamp=datetime.datetime.now(),
+        models=registry.models(),
+        enums=registry.enums(),
     )
+    if skip_black:
+        template.stream(**template_args).dump(sys.stdout)
+    else:
+        print(
+            black.format_str(
+                template.render(**template_args),
+                mode=black.Mode(),
+            )
+        )
 
 
 if __name__ == "__main__":

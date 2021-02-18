@@ -1,11 +1,13 @@
 #!/bin/sh
+
 set -e
 
-pip install pydantic
+pip -qq install pydantic
 
 basedir="$(dirname "$0")"
 workdir="$(mktemp -d)"
 cleanup() {
+    echo "Cleaning up ..."
     rm -rf "$workdir"
 }
 trap cleanup EXIT
@@ -21,11 +23,11 @@ python "$workdir/multiple_non_greedy.py"
 echo ": pass"
 
 echo -n "Test 3: single greedy model"
-python "$basedir/generate.py" Offer > "$workdir/single_greedy.py"
+python "$basedir/generate.py" --greedy --skip-black Offer > "$workdir/single_greedy.py"
 python "$workdir/single_greedy.py"
 echo ": pass"
 
 echo -n "Test 4: all models"
-python "$basedir/generate.py" all > "$workdir/all.py"
+python "$basedir/generate.py" --skip-black all > "$workdir/all.py"
 python "$workdir/all.py"
 echo ": pass"

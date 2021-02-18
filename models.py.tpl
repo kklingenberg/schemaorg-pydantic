@@ -6,12 +6,12 @@ at {{ timestamp }}
 
 This file was created by a [Typer](https://github.com/tiangolo/typer)-enabled
 python program which uses [Jinja2](https://jinja.palletsprojects.com/) templates
-to generate the pydantic models file and format it through
-[black](https://github.com/psf/black).
+to generate the pydantic models file{% if not skip_black %} and format it through
+[black](https://github.com/psf/black){% endif %}.
 
 Typer version: {{ typer_version }}
-Jinja2 version: {{ jinja2_version }}
-black version: {{ black_version }}
+Jinja2 version: {{ jinja2_version }}{% if not skip_black %}
+black version: {{ black_version }}{% endif %}
 
 """
 from datetime import date, datetime, time
@@ -39,12 +39,12 @@ class SchemaOrgBase(BaseModel):
 class {{ enum.name }}(str, Enum):
     """{{ enum.formatted_description }}
 
-    See https://schema.org/{{ enum.name }}.
+    See https://schema.org/{{ enum.schema_name }}.
 
     """
 
     {%- for member in enum.members %}
-    {{ member }} = "https://schema.org/{{ member }}"
+    {{ member.name }} = "https://schema.org/{{ member.schema_name }}"
     {%- endfor %}
 
 {% endfor %}
@@ -54,18 +54,18 @@ class {{ enum.name }}(str, Enum):
 class {{ model.name }}(SchemaOrgBase):
     """{{ model.formatted_description }}
 
-    See https://schema.org/{{ model.type_marker }}.
+    See https://schema.org/{{ model.schema_name }}.
 
     """
 
     {%- for field in model.fields %}
     {{ field.name }}: {{ field.type }} = Field(
         None,
-        {% if field.alias != field.name %}alias="{{ field.alias }}",{% endif %}
+        {% if field.schema_name != field.name %}alias="{{ field.schema_name }}",{% endif %}
         description={{ field.formatted_description }},
     )
     {%- endfor %}
-    locals().update({"@type": Field("{{ model.type_marker }}", const="{{ model.type_marker }}")})
+    locals().update({"@type": Field("{{ model.schema_name }}", const="{{ model.schema_name }}")})
 
 {% endfor %}
 
@@ -75,8 +75,8 @@ class {{ model.name }}(SchemaOrgBase):
 {%- endfor %}
 
 if __name__ == "__main__":
-    {# Idempotency #}
     {%- for model in models %}
+    {# Idempotency #}
     obj = {{ model.name }}.construct(name="foo", description=["bar", "baz"])
     assert obj.dict() == {{ model.name }}.parse_obj(obj.dict()).dict()
     {# Check dict lists are parsed as dicts, and not as as lists of dict keys #}
@@ -91,5 +91,4 @@ if __name__ == "__main__":
     quantitative_value = {"name": "foo", "maxValue": "123", "@type": "QuantitativeValue"}
     assert QuantitativeValue.parse_obj(quantitative_value).dict()["maxValue"] == 123
     {%- endif %}
-
     {%- endfor %}

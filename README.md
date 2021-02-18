@@ -34,6 +34,11 @@ Options:
                                   used (since the whole graph will be
                                   included).  [default: False]
 
+  --skip-black                    Disable formatting through black. The
+                                  generated output will be considerably
+                                  uglier, but it'll be generated faster.
+                                  [default: False]
+
   --install-completion [bash|zsh|fish|powershell|pwsh]
                                   Install completion for the specified shell.
   --show-completion [bash|zsh|fish|powershell|pwsh]
